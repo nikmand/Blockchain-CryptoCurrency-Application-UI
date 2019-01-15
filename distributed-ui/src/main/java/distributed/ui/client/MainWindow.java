@@ -26,22 +26,26 @@ import javax.swing.event.ChangeListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 
+import org.apache.log4j.Logger;
+
 import distributed.backend.trlog.DummyMain;
 import distributed.ui.operations.RoundedBorder;
 
 public class MainWindow {
 
-   // TODO add a logger
    private JFrame frame;
    private static JTextField recipient_addr;
    private static JTextField amount;
    private static JTable table;
 
+   private static final ClassLoader loader = Thread.currentThread().getContextClassLoader();
+   private static Logger LOG = Logger.getLogger(MainWindow.class.getName());
+
    /**
     * Launch the application.
     */
    public static void main(String[] args) {
-      System.out.println("Starting...");
+      LOG.info("Starting UI...");
       // should we launch here the backend procedure ?
       EventQueue.invokeLater(new Runnable() {
          @Override
@@ -78,7 +82,7 @@ public class MainWindow {
 
       Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
       frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
-      URL iconURL = getClass().getResource("bitcoin.png");
+      URL iconURL = loader.getResource("bitcoin.png");
       ImageIcon icon = new ImageIcon(iconURL);
       frame.setIconImage(icon.getImage());
 
@@ -162,13 +166,12 @@ public class MainWindow {
                JOptionPane.showMessageDialog(tabbedPane,
                      "Are you sure you want to transfer " + amountValue + " to " + recipient_addr_value + " ?",
                      "Confirm Transaction", JOptionPane.QUESTION_MESSAGE);
-               System.out.println("Start transaction");
+               LOG.debug("Start function to make the transaction here");
                // TODO call function
             } catch (IllegalArgumentException e1) {
                JOptionPane.showMessageDialog(tabbedPane,
                      "A problem arised with your arguments. Please validate them in order to continue",
                      "Input Error", JOptionPane.ERROR_MESSAGE);
-               System.out.println("Please confirm that arguments specified are valid");
             }
          }
       });
