@@ -1,37 +1,48 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>distributed-ui</groupId>
+  <groupId>distributed.ui</groupId>
   <artifactId>distributed-ui</artifactId>
   <version>0.0.1-SNAPSHOT</version>
   
   <properties>
     <version.slf4j>1.7.24</version.slf4j>
     <log4j.version>1.2.17</log4j.version>
-  </properties>>
+  </properties>
   
   <dependencies>
-    <dependency>
+    <!--  <dependency> 
         <groupId>distributed.backend</groupId>
         <artifactId>distributed-backend</artifactId>
         <version>0.0.1-SNAPSHOT</version>
-    </dependency>
+    </dependency> -->
     
-  <dependency>
+     <dependency> 
+	    <groupId>distributed.core</groupId>
+	    <artifactId>blockchain</artifactId>
+	    <version>1.0-SNAPSHOT</version>
+    </dependency>   
+    
+  <!--  <dependency>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
       <version>${log4j.version}</version>
-    </dependency> 
+    </dependency> --> 
     
-        <!-- <dependency>
+   <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
       <version>${version.slf4j}</version>
-    </dependency>-->
+   </dependency>
+
+   <dependency>
+       <groupId>org.slf4j</groupId>
+       <artifactId>slf4j-log4j12</artifactId>
+       <version>${version.slf4j}</version>
+   </dependency>   
 
   </dependencies>
   
   <build>
-    <sourceDirectory>src</sourceDirectory>
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -41,6 +52,25 @@
           <target>1.8</target>
         </configuration>
       </plugin>
+      
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>2.4.3</version>
+          <configuration>
+            <createDependencyReducedPom>false</createDependencyReducedPom>
+            <keepDependenciesWithProvidedScope>false</keepDependenciesWithProvidedScope>
+          </configuration>
+          <executions>
+            <execution>
+              <phase>package</phase>
+              <goals>
+                <goal>shade</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+      
     </plugins>
   </build>
 </project>

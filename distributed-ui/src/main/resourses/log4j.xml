@@ -8,6 +8,11 @@
     </layout>
   </appender>
   
+  <logger name="distributed.core" additivity="false">
+    <level value="DEBUG" />
+    <appender-ref ref="console" />
+  </logger>
+  
   <logger name="distributed.ui" additivity="false">
     <level value="DEBUG" />
     <appender-ref ref="console" />

@@ -8,7 +8,14 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
+import java.security.PublicKey;
+import java.security.Security;
+import java.util.Base64;
+import java.util.List;
 
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
@@ -26,231 +33,308 @@ import javax.swing.event.ChangeListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import distributed.backend.trlog.DummyMain;
+import distributed.core.entities.Blockchain;
+import distributed.core.entities.NodeMiner;
+import distributed.core.entities.Transaction;
+import distributed.core.threads.ServerThread;
 import distributed.ui.operations.RoundedBorder;
 
 public class MainWindow {
 
-   private JFrame frame;
-   private static JTextField recipient_addr;
-   private static JTextField amount;
-   private static JTable table;
+	private JFrame frame;
+	private static JTextField recipient_addr;
+	private static JTextField amount;
+	private static JTable table;
 
-   private static final ClassLoader loader = Thread.currentThread().getContextClassLoader();
-   private static Logger LOG = Logger.getLogger(MainWindow.class.getName());
+	private static final ClassLoader loader = Thread.currentThread().getContextClassLoader();
+	private static final Logger LOG = LoggerFactory.getLogger(MainWindow.class.getName());
 
-   /**
-    * Launch the application.
-    */
-   public static void main(String[] args) {
-      LOG.info("Starting UI...");
-      // should we launch here the backend procedure ?
-      EventQueue.invokeLater(new Runnable() {
-         @Override
-         public void run() {
-            try {
-               MainWindow window = new MainWindow();
-               window.frame.setVisible(true);
-            } catch (Exception e) {
-               e.printStackTrace();
-            }
-         }
-      });
-   }
+	private static NodeMiner node;
+	private String lastBlockHash = null;
 
-   /**
-    * Create the application.
-    */
-   public MainWindow() {
-      initialize();
-   }
+	/**
+	 * Launch the application.
+	 *
+	 * @throws IOException
+	 */
+	public static void main(String[] args) throws IOException {
+		LOG.info("Starting UI...", 5);
 
-   /**
-    * Initialize the contents of the frame.
-    */
-   private void initialize() {
-      frame = new JFrame();
-      frame.setSize(512, 460);
-      frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-      //frame.getContentPane().setLayout(null);
-      frame.setMinimumSize(new Dimension(450, 300));
-      //frame.setMaximizedBounds(new Rectangle(100, 100, 720, 600));
-      frame.setResizable(false);
-      frame.setTitle("Noobcash client");
+		initializeBackEnd(args);
+		// should we launch here the backend procedure ?
+		EventQueue.invokeLater(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					MainWindow window = new MainWindow();
+					window.frame.setVisible(true);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		});
+	}
 
-      Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
-      frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
-      URL iconURL = loader.getResource("bitcoin.png");
-      ImageIcon icon = new ImageIcon(iconURL);
-      frame.setIconImage(icon.getImage());
+	/**
+	 * Create the application.
+	 */
+	public MainWindow() {
+		initialize();
+	}
 
-      JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
-      frame.getContentPane().add(tabbedPane);
-      tabbedPane.setBounds(0, 0, 434, 261);
-      tabbedPane.addChangeListener(new ChangeListener() {
-         // This method is called whenever the selected tab changes
-         @Override
-         public void stateChanged(ChangeEvent evt) {
-            JTabbedPane TabbedPane = (JTabbedPane) evt.getSource();
+	public static void initializeBackEnd(String args[]) throws IOException {
+		LOG.info("START initializing backend");
 
-            // Get current tab
-            int tab = TabbedPane.getSelectedIndex();
-            JPanel aux = (JPanel) tabbedPane.getComponent(tab);
-            switch (tab) {
-            case 0:
-               DummyMain.main(null);
-               break;
-            case 1:
-               break;
-            case 2:
-               JLabel lbl = (JLabel) aux.getComponent(0);
-               int balance = 5; // TODO replace with function 
-               lbl.setText("Your balance is " + balance + " noobcash.");
-               break;
-            case 3:
-               break;
-            }
-         }
-      });
-      frame.getContentPane().add(tabbedPane);
+		Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
+		// String myAddress = Inet4Address.getLocalHost().getHostAddress(); // args[0];
+		// δε χρειάζεται δημιουργείται εξ ορισμού στην ip της εφαρμογής
+		// το πορτ θα μπορούσε να τίθεται αυτόματα διαλέγοντας κάποια πόρτα
+		if (args.length < 1) {
+			LOG.warn("A port number must be provided in order for the node to start. Exiting...");
+			return;
+		}
+		int myPort = Integer.parseInt(args[0]);
+		int numOfNodes = 3;
+		if (args.length < 2) {
+			LOG.warn("Number of nodes wasn't specified, procedding with defaults which is {}", numOfNodes);
+		} else {
+			numOfNodes = Integer.parseInt(args[1]);
+		}
 
-      // New trans panel
-      initializeNewTransPanel(tabbedPane);
+		node = new NodeMiner(myPort);
+		node.setNumOfNodes(numOfNodes);
+		node.setBlockchain(new Blockchain());
+		// Define new server
+		ServerThread server = new ServerThread(myPort, node);
 
-      // View last trans panel
-      initializeViewLastTransPanel(tabbedPane);
+		LOG.info("About to start server...");
+		server.start(); // εκκινούμε το thread του server όπου μας έρχονται μηνύματα
 
-      // Show balance panel
-      initializeBalancePanel(tabbedPane);
+		// connectToBootstrap(myAddress, myPort);
+		node.initiliazeNetoworkConnections();
 
-      // Help panel
-      initializeHelpPanel(tabbedPane);
+		InputStream is = null;
+		BufferedReader br = null;
 
-   }
+		//Thread.sleep(12000); // for debug
+		//node.getBlockchain().printBlockChain();
+		//LOG.info("Size of blockchain={}", node.getBlockchain().getSize());
 
-   private static void initializeNewTransPanel(JTabbedPane tabbedPane) {
-      JPanel newTransPanel = new JPanel();
-      tabbedPane.addTab("New transaction", null, newTransPanel, null);
-      newTransPanel.setLayout(null);
+		//server.getServerSocket().close();
+	}
 
-      recipient_addr = new JTextField();          // two textfields for user input
-      recipient_addr.setBounds(247, 51, 90, 23);
-      recipient_addr.setBorder(new RoundedBorder(5));
-      newTransPanel.add(recipient_addr);
-      recipient_addr.setColumns(10);
+	/**
+	 * Initialize the contents of the frame.
+	 */
+	private void initialize() {
+		LOG.info("START initializion of frontend");
 
-      amount = new JTextField();
-      amount.setBounds(247, 93, 90, 23);
-      amount.setBorder(new RoundedBorder(5));
-      newTransPanel.add(amount);
-      amount.setColumns(10);
+		frame = new JFrame();
+		frame.setSize(512, 460);
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		// frame.getContentPane().setLayout(null);
+		frame.setMinimumSize(new Dimension(450, 300));
+		// frame.setMaximizedBounds(new Rectangle(100, 100, 720, 600));
+		frame.setResizable(false);
+		frame.setTitle("Noobcash client");
 
-      JButton submitTransBtn = new JButton("Submit Transaction");
-      submitTransBtn.addActionListener(new ActionListener() {
-         @Override
-         public void actionPerformed(ActionEvent e) {}
-      });
-      submitTransBtn.addMouseListener(new MouseAdapter() {
-         @Override
-         public void mouseClicked(MouseEvent e) {
-            String recipient_addr_value = recipient_addr.getText();
-            int amountValue;
-            try {
-               amountValue = Integer.parseInt(amount.getText());
-               if (recipient_addr_value == null || recipient_addr_value == "" || recipient_addr_value.trim().isEmpty()
-                     || amountValue < 0) {
-                  throw new IllegalArgumentException();
-               }
-               JOptionPane.showMessageDialog(tabbedPane,
-                     "Are you sure you want to transfer " + amountValue + " to " + recipient_addr_value + " ?",
-                     "Confirm Transaction", JOptionPane.QUESTION_MESSAGE);
-               LOG.debug("Start function to make the transaction here");
-               // TODO call function
-            } catch (IllegalArgumentException e1) {
-               JOptionPane.showMessageDialog(tabbedPane,
-                     "A problem arised with your arguments. Please validate them in order to continue",
-                     "Input Error", JOptionPane.ERROR_MESSAGE);
-            }
-         }
-      });
-      submitTransBtn.setBounds(230, 167, 122, 23);
-      submitTransBtn.setMargin(new Insets(1, 1, 1, 1));
-      submitTransBtn.setBorder(new RoundedBorder(5));
-      newTransPanel.add(submitTransBtn);
+		Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
+		frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
+		URL iconURL = loader.getResource("bitcoin.png");
+		try {
+			ImageIcon icon = new ImageIcon(iconURL);
+			frame.setIconImage(icon.getImage());
+		} catch (NullPointerException e) {
+			LOG.warn("Icon image not found");
+		}
 
-      JLabel msgRecpLabel = new JLabel("Recipient label");
-      msgRecpLabel.setBounds(89, 55, 148, 14);
-      msgRecpLabel.setText("Recipient's address");
-      newTransPanel.add(msgRecpLabel);
+		JTabbedPane tabbedPane = new JTabbedPane(JTabbedPane.TOP);
+		frame.getContentPane().add(tabbedPane);
+		tabbedPane.setBounds(0, 0, 434, 261);
+		tabbedPane.addChangeListener(new ChangeListener() {
+			// This method is called whenever the selected tab changes
+			@Override
+			public void stateChanged(ChangeEvent evt) {
+				JTabbedPane TabbedPane = (JTabbedPane) evt.getSource();
 
-      JLabel msgAmtLabel = new JLabel("Amount label");
-      msgAmtLabel.setBounds(89, 97, 148, 14);
-      msgAmtLabel.setText("Amount to transfer");
-      newTransPanel.add(msgAmtLabel);
+				// Get current tab
+				int tab = TabbedPane.getSelectedIndex();
+				JPanel aux = (JPanel) tabbedPane.getComponent(tab);
+				switch (tab) {
+				case 0:
+					// TODO get the entry values and call sendFunds
+					break;
+				case 1:
+					String lastHash = node.getBlockchain().getLastHash();
+					if (lastHash.equals(lastBlockHash)) {
+						break;
+					}
+					lastBlockHash = lastHash;
+					List<Transaction> tList = node.getBlockchain().getTransLastBlock();
+					DefaultTableModel tableModel = (DefaultTableModel) table.getModel();
+					for (Transaction t : tList) {
+						PublicKey senders = t.getSenderAddress();
+						String b64Sender = senders == null ? "Genesis" : senders.getEncoded().toString();
+						String b64Receiver = Base64.getEncoder().encodeToString(t.getReceiverAddress().getEncoded());
+						tableModel.addRow(new Object[] { t.getTransactionId(), b64Sender, b64Receiver, t.getAmount() });
+					}
+					break;
+				case 2:
+					JLabel lbl = (JLabel) aux.getComponent(0);
+					float balance = node.getBalance(); // TODO replace with function
+					lbl.setText("Your balance is " + balance + " noobcash.");
+					break;
+				case 3:
+					break;
+				}
+			}
+		});
+		frame.getContentPane().add(tabbedPane);
 
-   }
+		// New transaction panel
+		initializeNewTransPanel(tabbedPane);
 
-   private static void initializeViewLastTransPanel(JTabbedPane tabbedPane) {
-      JPanel lastTransPanel = new JPanel();
-      tabbedPane.addTab("View last transactions", null, lastTransPanel, null);
+		// View transactions of last block panel
+		initializeViewLastTransPanel(tabbedPane);
 
-      table = new JTable();
-      JScrollPane scrollPane = new JScrollPane(table);
-      lastTransPanel.add(scrollPane);
-      DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
-      centerRenderer.setHorizontalAlignment(SwingConstants.CENTER);
+		// Show balance panel
+		initializeBalancePanel(tabbedPane);
 
-      DefaultTableModel tableModel = new DefaultTableModel();
-      tableModel.addColumn("Id");
-      tableModel.addColumn("Sender");
-      tableModel.addColumn("Recipient");
-      tableModel.addColumn("Amount");
-      for (int i = 0; i < 10; i++) {
-         tableModel.addRow(new Object[] {
-               i, "sender", "receiver", "5"
-         });
-      }
-      table.setModel(tableModel);
-      table.setEnabled(false);   // by this way cells cannot be edited
-      for (int x = 0; x < table.getColumnCount(); x++) {
-         table.getColumnModel().getColumn(x).setCellRenderer(centerRenderer);
-      }
-   }
+		// Help panel
+		initializeHelpPanel(tabbedPane);
 
-   private static void initializeBalancePanel(JTabbedPane tabbedPane) {
-      JPanel balancePanel = new JPanel();
-      tabbedPane.addTab("Show balance", null, balancePanel, null);
+	}
 
-      JLabel lblNewLabel_1 = new JLabel("New label");
-      lblNewLabel_1.setBounds(10, 11, 395, 51);
-      lblNewLabel_1.setText("");
-      balancePanel.add(lblNewLabel_1);
-   }
+	private static void initializeNewTransPanel(JTabbedPane tabbedPane) {
+		LOG.info("START initialize new trans panel");
 
-   private static void initializeHelpPanel(JTabbedPane tabbedPane) {
-      JPanel helpPanel = new JPanel();
-      tabbedPane.addTab("Help", null, helpPanel, null);
-      helpPanel.setLayout(null);
-      //helpPanel.setLayout(new GridLayout(3, 1, 40, 40));
+		JPanel newTransPanel = new JPanel();
+		tabbedPane.addTab("New transaction", null, newTransPanel, null);
+		newTransPanel.setLayout(null);
 
-      JLabel newTransLabel = new JLabel("New transaction");
-      newTransLabel.setBounds(10, 11, 395, 51);
-      newTransLabel.setText(
-            "<html><b>New transaction:</b> provide recipient's wallet address as well as specify the amount you wish to transfer</html>");
-      helpPanel.add(newTransLabel);
+		recipient_addr = new JTextField(); // two textfields for user input
+		recipient_addr.setBounds(247, 51, 90, 23);
+		recipient_addr.setBorder(new RoundedBorder(5));
+		newTransPanel.add(recipient_addr);
+		recipient_addr.setColumns(10);
 
-      JLabel viewLastTransLabel = new JLabel("View last transaction");
-      viewLastTransLabel.setBounds(10, 72, 395, 51);
-      viewLastTransLabel.setText(
-            "<html><b>View last transaction:</b> returns the transactions that are contained in the last block</html>");
-      helpPanel.add(viewLastTransLabel);
+		amount = new JTextField();
+		amount.setBounds(247, 93, 90, 23);
+		amount.setBorder(new RoundedBorder(5));
+		newTransPanel.add(amount);
+		amount.setColumns(10);
 
-      JLabel balanceLabel = new JLabel("Show balance");
-      balanceLabel.setBounds(10, 133, 395, 51);
-      balanceLabel.setText(
-            "<html><b>Show balance:</b> returns the amount of coins in your wallet</html>");
-      helpPanel.add(balanceLabel);
-   }
+		JButton submitTransBtn = new JButton("Submit Transaction");
+		submitTransBtn.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+			}
+		});
+		submitTransBtn.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				String recipient_addr_value = recipient_addr.getText();
+				int amountValue;
+				try {
+					amountValue = Integer.parseInt(amount.getText());
+					if (recipient_addr_value == null || recipient_addr_value == ""
+							|| recipient_addr_value.trim().isEmpty() || amountValue < 0) {
+						throw new IllegalArgumentException();
+					}
+					JOptionPane.showMessageDialog(tabbedPane,
+							"Are you sure you want to transfer " + amountValue + " to " + recipient_addr_value + " ?",
+							"Confirm Transaction", JOptionPane.QUESTION_MESSAGE);
+					LOG.debug("Start function to make the transaction here");
+					// TODO call function
+				} catch (IllegalArgumentException e1) {
+					JOptionPane.showMessageDialog(tabbedPane,
+							"A problem arised with your arguments. Please validate them in order to continue",
+							"Input Error", JOptionPane.ERROR_MESSAGE);
+				}
+			}
+		});
+		submitTransBtn.setBounds(230, 167, 122, 23);
+		submitTransBtn.setMargin(new Insets(1, 1, 1, 1));
+		submitTransBtn.setBorder(new RoundedBorder(5));
+		newTransPanel.add(submitTransBtn);
+
+		JLabel msgRecpLabel = new JLabel("Recipient label");
+		msgRecpLabel.setBounds(89, 55, 148, 14);
+		msgRecpLabel.setText("Recipient's address");
+		newTransPanel.add(msgRecpLabel);
+
+		JLabel msgAmtLabel = new JLabel("Amount label");
+		msgAmtLabel.setBounds(89, 97, 148, 14);
+		msgAmtLabel.setText("Amount to transfer");
+		newTransPanel.add(msgAmtLabel);
+
+	}
+
+	private static void initializeViewLastTransPanel(JTabbedPane tabbedPane) {
+		LOG.info("START initialize view panel");
+
+		JPanel lastTransPanel = new JPanel();
+		tabbedPane.addTab("View last transactions", null, lastTransPanel, null);
+
+		table = new JTable();
+		JScrollPane scrollPane = new JScrollPane(table);
+		lastTransPanel.add(scrollPane);
+
+		DefaultTableModel tableModel = new DefaultTableModel();
+		tableModel.addColumn("Id");
+		tableModel.addColumn("Sender");
+		tableModel.addColumn("Recipient");
+		tableModel.addColumn("Amount");
+
+		table.setModel(tableModel);
+		table.setEnabled(false); // by this way cells cannot be edited
+
+		DefaultTableCellRenderer centerRenderer = new DefaultTableCellRenderer();
+		centerRenderer.setHorizontalAlignment(SwingConstants.CENTER);
+
+		for (int x = 0; x < table.getColumnCount(); x++) {
+			table.getColumnModel().getColumn(x).setCellRenderer(centerRenderer);
+		}
+	}
+
+	private static void initializeBalancePanel(JTabbedPane tabbedPane) {
+		LOG.info("START initialize balance panel");
+
+		JPanel balancePanel = new JPanel();
+		tabbedPane.addTab("Show balance", null, balancePanel, null);
+
+		JLabel lblNewLabel_1 = new JLabel("New label");
+		lblNewLabel_1.setBounds(10, 11, 395, 51);
+		lblNewLabel_1.setText("");
+		balancePanel.add(lblNewLabel_1);
+	}
+
+	private static void initializeHelpPanel(JTabbedPane tabbedPane) {
+		LOG.info("START initialize help panel");
+
+		JPanel helpPanel = new JPanel();
+		tabbedPane.addTab("Help", null, helpPanel, null);
+		helpPanel.setLayout(null);
+		// helpPanel.setLayout(new GridLayout(3, 1, 40, 40));
+
+		JLabel newTransLabel = new JLabel("New transaction");
+		newTransLabel.setBounds(10, 11, 395, 51);
+		newTransLabel.setText(
+				"<html><b>New transaction:</b> provide recipient's wallet address as well as specify the amount you wish to transfer</html>");
+		helpPanel.add(newTransLabel);
+
+		JLabel viewLastTransLabel = new JLabel("View last transaction");
+		viewLastTransLabel.setBounds(10, 72, 395, 51);
+		viewLastTransLabel.setText(
+				"<html><b>View last transaction:</b> returns the transactions that are contained in the last block</html>");
+		helpPanel.add(viewLastTransLabel);
+
+		JLabel balanceLabel = new JLabel("Show balance");
+		balanceLabel.setBounds(10, 133, 395, 51);
+		balanceLabel.setText("<html><b>Show balance:</b> returns the amount of coins in your wallet</html>");
+		helpPanel.add(balanceLabel);
+	}
 }
