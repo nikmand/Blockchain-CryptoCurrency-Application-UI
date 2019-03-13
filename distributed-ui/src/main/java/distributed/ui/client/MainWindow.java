@@ -33,6 +33,8 @@ import javax.swing.event.ChangeListener;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Triple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,7 +65,7 @@ public class MainWindow {
 	public static void main(String[] args) throws IOException {
 		LOG.info("Starting UI...", 5);
 
-		initializeBackEnd(args);
+		node = NodeMiner.initializeBackEnd(args);
 		// should we launch here the backend procedure ?
 		EventQueue.invokeLater(new Runnable() {
 			@Override
@@ -85,46 +87,36 @@ public class MainWindow {
 		initialize();
 	}
 
-	public static void initializeBackEnd(String args[]) throws IOException {
-		LOG.info("START initializing backend");
-
-		Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
-		// String myAddress = Inet4Address.getLocalHost().getHostAddress(); // args[0];
-		// δε χρειάζεται δημιουργείται εξ ορισμού στην ip της εφαρμογής
-		// το πορτ θα μπορούσε να τίθεται αυτόματα διαλέγοντας κάποια πόρτα
-		if (args.length < 1) {
-			LOG.warn("A port number must be provided in order for the node to start. Exiting...");
-			return;
-		}
-		int myPort = Integer.parseInt(args[0]);
-		int numOfNodes = 3;
-		if (args.length < 2) {
-			LOG.warn("Number of nodes wasn't specified, procedding with defaults which is {}", numOfNodes);
-		} else {
-			numOfNodes = Integer.parseInt(args[1]);
-		}
-
-		node = new NodeMiner(myPort);
-		node.setNumOfNodes(numOfNodes);
-		node.setBlockchain(new Blockchain());
-		// Define new server
-		ServerThread server = new ServerThread(myPort, node);
-
-		LOG.info("About to start server...");
-		server.start(); // εκκινούμε το thread του server όπου μας έρχονται μηνύματα
-
-		// connectToBootstrap(myAddress, myPort);
-		node.initiliazeNetoworkConnections();
-
-		InputStream is = null;
-		BufferedReader br = null;
-
-		//Thread.sleep(12000); // for debug
-		//node.getBlockchain().printBlockChain();
-		//LOG.info("Size of blockchain={}", node.getBlockchain().getSize());
-
-		//server.getServerSocket().close();
-	}
+	/* public static void initializeBackEnd(String args[]) throws IOException {
+	 * LOG.info("START initializing backend");
+	 *
+	 * Security.addProvider(new
+	 * org.bouncycastle.jce.provider.BouncyCastleProvider()); // String myAddress =
+	 * Inet4Address.getLocalHost().getHostAddress(); // args[0]; // δε χρειάζεται
+	 * δημιουργείται εξ ορισμού στην ip της εφαρμογής // το πορτ θα μπορούσε να
+	 * τίθεται αυτόματα διαλέγοντας κάποια πόρτα if (args.length < 1) { LOG.
+	 * warn("A port number must be provided in order for the node to start. Exiting..."
+	 * ); return; } int myPort = Integer.parseInt(args[0]); int numOfNodes = 3; if
+	 * (args.length < 2) { LOG.
+	 * warn("Number of nodes wasn't specified, procedding with defaults which is {}"
+	 * , numOfNodes); } else { numOfNodes = Integer.parseInt(args[1]); }
+	 *
+	 * node = new NodeMiner(myPort); node.setNumOfNodes(numOfNodes);
+	 * node.setBlockchain(new Blockchain()); // Define new server ServerThread
+	 * server = new ServerThread(myPort, node);
+	 *
+	 * LOG.info("About to start server..."); server.start(); // εκκινούμε το thread
+	 * του server όπου μας έρχονται μηνύματα
+	 *
+	 * // connectToBootstrap(myAddress, myPort);
+	 * node.initiliazeNetoworkConnections();
+	 *
+	 * InputStream is = null; BufferedReader br = null;
+	 *
+	 * //Thread.sleep(12000); // for debug //node.getBlockchain().printBlockChain();
+	 * //LOG.info("Size of blockchain={}", node.getBlockchain().getSize());
+	 *
+	 * //server.getServerSocket().close(); } */
 
 	/**
 	 * Initialize the contents of the frame.
@@ -139,7 +131,7 @@ public class MainWindow {
 		frame.setMinimumSize(new Dimension(450, 300));
 		// frame.setMaximizedBounds(new Rectangle(100, 100, 720, 600));
 		frame.setResizable(false);
-		frame.setTitle("Noobcash client");
+		frame.setTitle("Noobcash client - " + node.getId());
 
 		Dimension dim = Toolkit.getDefaultToolkit().getScreenSize();
 		frame.setLocation(dim.width / 2 - frame.getSize().width / 2, dim.height / 2 - frame.getSize().height / 2);
@@ -165,7 +157,7 @@ public class MainWindow {
 				JPanel aux = (JPanel) tabbedPane.getComponent(tab);
 				switch (tab) {
 				case 0:
-					// TODO get the entry values and call sendFunds
+					// everything happens when submit button is clicked
 					break;
 				case 1:
 					String lastHash = node.getBlockchain().getLastHash();
@@ -175,11 +167,20 @@ public class MainWindow {
 					lastBlockHash = lastHash;
 					List<Transaction> tList = node.getBlockchain().getTransLastBlock();
 					DefaultTableModel tableModel = (DefaultTableModel) table.getModel();
+					if (tableModel.getRowCount() > 0) {
+						for (int i = tableModel.getRowCount() - 1; i > -1; i--) {
+							tableModel.removeRow(i);
+						}
+					}
 					for (Transaction t : tList) {
 						PublicKey senders = t.getSenderAddress();
-						String b64Sender = senders == null ? "Genesis" : senders.getEncoded().toString();
+						String b64Sender = senders == null ? "Genesis"
+								: StringUtils.right(Base64.getEncoder().encodeToString(senders.getEncoded()), 10);
 						String b64Receiver = Base64.getEncoder().encodeToString(t.getReceiverAddress().getEncoded());
-						tableModel.addRow(new Object[] { t.getTransactionId(), b64Sender, b64Receiver, t.getAmount() });
+						// we show last digits of keys because only those are different
+						// TODO better use ids
+						tableModel.addRow(new Object[] { t.getTransactionId(), b64Sender,
+								b64Receiver.substring(b64Receiver.length() - 10), t.getAmount() });
 					}
 					break;
 				case 2:
@@ -228,27 +229,64 @@ public class MainWindow {
 		amount.setColumns(10);
 
 		JButton submitTransBtn = new JButton("Submit Transaction");
-		submitTransBtn.addActionListener(new ActionListener() {
-			@Override
-			public void actionPerformed(ActionEvent e) {
-			}
-		});
+		/*		submitTransBtn.addActionListener(new ActionListener() { // we need this ?
+					@Override
+					public void actionPerformed(ActionEvent e) {
+					}
+				});*/
 		submitTransBtn.addMouseListener(new MouseAdapter() {
 			@Override
+			public void mousePressed(MouseEvent event) {
+				//LOG.debug("pressed");
+			}
+
+			@Override
+			public void mouseReleased(MouseEvent e) {
+				LOG.debug("released");
+				if (submitTransBtn.contains(e.getPoint())) {
+					mouseClicked(e); // capture a click event in this case also
+				}
+			}
+
+			@Override
 			public void mouseClicked(MouseEvent e) {
+				LOG.info("Sumbit transaction was clicked");
+
 				String recipient_addr_value = recipient_addr.getText();
-				int amountValue;
+				float amountValue;
 				try {
-					amountValue = Integer.parseInt(amount.getText());
+					amountValue = Float.parseFloat(amount.getText());
 					if (recipient_addr_value == null || recipient_addr_value == ""
 							|| recipient_addr_value.trim().isEmpty() || amountValue < 0) {
 						throw new IllegalArgumentException();
 					}
-					JOptionPane.showMessageDialog(tabbedPane,
+					Triple<PublicKey, String, Integer> triple = node.getNode(recipient_addr_value);
+					if (triple == null) {
+						JOptionPane.showMessageDialog(tabbedPane,
+								"There is not a node with address/id: " + recipient_addr_value, "Input Error",
+								JOptionPane.ERROR_MESSAGE);
+						return;
+					}
+					int dialogRes = JOptionPane.showConfirmDialog(tabbedPane,
 							"Are you sure you want to transfer " + amountValue + " to " + recipient_addr_value + " ?",
-							"Confirm Transaction", JOptionPane.QUESTION_MESSAGE);
-					LOG.debug("Start function to make the transaction here");
+							"Confirm Transaction", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+					if (dialogRes == 2) {
+						LOG.info("Transaction discarted");
+						amount.setText("");
+						recipient_addr.setText("");
+						return;
+					}
+					LOG.info("Start function to make the transaction here");
 					// TODO call function
+					Transaction trans = node.sendFunds(triple.getLeft(), amountValue);
+					if (trans == null) {
+						JOptionPane.showMessageDialog(tabbedPane, "Insufficient funds", "Input Error",
+								JOptionPane.ERROR_MESSAGE);
+					} else {
+						node.sendTrans(trans);
+						amount.setText("");
+						recipient_addr.setText("");
+					}
 				} catch (IllegalArgumentException e1) {
 					JOptionPane.showMessageDialog(tabbedPane,
 							"A problem arised with your arguments. Please validate them in order to continue",
