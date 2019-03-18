@@ -185,7 +185,7 @@ public class MainWindow {
 					break;
 				case 2:
 					JLabel lbl = (JLabel) aux.getComponent(0);
-					float balance = node.getBalance(); // TODO replace with function
+					float balance = node.getBalance();
 					lbl.setText("Your balance is " + balance + " noobcash.");
 					break;
 				case 3:
@@ -229,11 +229,6 @@ public class MainWindow {
 		amount.setColumns(10);
 
 		JButton submitTransBtn = new JButton("Submit Transaction");
-		/*		submitTransBtn.addActionListener(new ActionListener() { // we need this ?
-					@Override
-					public void actionPerformed(ActionEvent e) {
-					}
-				});*/
 		submitTransBtn.addMouseListener(new MouseAdapter() {
 			@Override
 			public void mousePressed(MouseEvent event) {
@@ -250,14 +245,14 @@ public class MainWindow {
 
 			@Override
 			public void mouseClicked(MouseEvent e) {
-				LOG.info("Sumbit transaction was clicked");
+				LOG.debug("Sumbit transaction was clicked");
 
 				String recipient_addr_value = recipient_addr.getText();
 				float amountValue;
 				try {
 					amountValue = Float.parseFloat(amount.getText());
 					if (recipient_addr_value == null || recipient_addr_value == ""
-							|| recipient_addr_value.trim().isEmpty() || amountValue < 0) {
+							|| recipient_addr_value.trim().isEmpty() || amountValue <= 0) {
 						throw new IllegalArgumentException();
 					}
 					Triple<PublicKey, String, Integer> triple = node.getNode(recipient_addr_value);
@@ -277,13 +272,12 @@ public class MainWindow {
 						return;
 					}
 					LOG.info("Start function to make the transaction here");
-					// TODO call function
-					Transaction trans = node.sendFunds(triple.getLeft(), amountValue);
+					Transaction trans = node.sendFunds(triple.getLeft(), amountValue); // TODO use create and send, any error should become an exception
 					if (trans == null) {
 						JOptionPane.showMessageDialog(tabbedPane, "Insufficient funds", "Input Error",
 								JOptionPane.ERROR_MESSAGE);
 					} else {
-						node.sendTrans(trans);
+						node.sendTxnMine(trans);
 						amount.setText("");
 						recipient_addr.setText("");
 					}
