@@ -161,7 +161,7 @@ public class MainWindow {
 					break;
 				case 1:
 					String lastHash = node.getBlockchain().getLastHash();
-					if (lastHash.equals(lastBlockHash)) {
+					if (lastHash.equals(lastBlockHash)) { // TODO produces nullPExcep. what's its purpose?
 						break;
 					}
 					lastBlockHash = lastHash;
@@ -178,9 +178,10 @@ public class MainWindow {
 								: StringUtils.right(Base64.getEncoder().encodeToString(senders.getEncoded()), 10);
 						String b64Receiver = Base64.getEncoder().encodeToString(t.getReceiverAddress().getEncoded());
 						// we show last digits of keys because only those are different
-						// TODO better use ids
-						tableModel.addRow(new Object[] { t.getTransactionId(), b64Sender,
-								b64Receiver.substring(b64Receiver.length() - 10), t.getAmount() });
+						String senderId = senders == null ? "Genesis" : node.getIdFromKey(senders);
+						String receiverId = node.getIdFromKey(t.getReceiverAddress());
+						tableModel.addRow(new Object[] { t.getTransactionId(), senderId, receiverId
+								/*b64Receiver.substring(b64Receiver.length() - 10)*/, t.getAmount() });
 					}
 					break;
 				case 2:
